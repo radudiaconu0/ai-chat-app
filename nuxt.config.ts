@@ -8,7 +8,7 @@ export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/fonts', '@nuxt/icon', '@nuxt/scripts', '@nuxt/ui', '@nuxt/test-utils', '@nuxt/image', '@nuxtjs/supabase', '@nuxtjs/tailwindcss', '@vueuse/nuxt'],
   runtimeConfig: {
     public: {
-      openAiKey: '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'
+      openAiKey: process.env.OPENAI_API_KEY || ''
     }
   },
   supabase: {
