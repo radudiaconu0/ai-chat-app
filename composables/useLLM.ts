@@ -1,5 +1,15 @@
 // composables/useLLM.ts
 import OpenAI from 'openai'
+import type {
+  ChatCompletionMessageParam,
+  ChatCompletionContentPart,
+  Images,
+  ImageGenerateParams,
+  ChatCompletionChunk
+} from 'openai/resources/index.mjs'
+
+// Import Message and Attachment interfaces from useDatabase.ts
+import type { Message, Attachment } from '~/composables/useDatabase'
 
 export interface LLMModel {
   id: string
@@ -13,21 +23,30 @@ export interface LLMModel {
   capabilities: string[]
 }
 
+// Define the shape of the streamed chunk data
+export interface StreamChunk {
+  content: string;
+  finished: boolean;
+  finishReason?: string;
+  usage?: OpenAI.CompletionUsage;
+  error?: string;
+}
+
 export const useLLM = () => {
   const config = useRuntimeConfig()
-  console.log(config.openAiKey)
-  
+
+  // Initialize OpenAI client with OpenRouter base URL and API key
   const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
-    apiKey: config.public.openAiKey,
+    apiKey: config.public.openrouterApiKey,
     defaultHeaders: {
       "HTTP-Referer": "http://localhost:3000",
       "X-Title": "AI Chat App",
     },
-    dangerouslyAllowBrowser: true // For client-side usage
+    dangerouslyAllowBrowser: true
   })
 
-  // Available models on OpenRouter
+  // Available models on OpenRouter with explicit LLMModel type
   const models: LLMModel[] = [
     {
       id: 'anthropic/claude-3.5-sonnet',
@@ -87,33 +106,41 @@ export const useLLM = () => {
     }
   ]
 
-  // Get models by capability
-  const getModelsByCapability = (capability: string) => {
+  /**
+   * Filters the available LLM models by a specific capability.
+   */
+  const getModelsByCapability = (capability: string): LLMModel[] => {
     return models.filter(model => model.capabilities.includes(capability))
   }
 
-  // Calculate cost estimate
-  const calculateCost = (model: LLMModel, promptTokens: number, completionTokens: number = 0) => {
-    const promptCost = (promptTokens / 1000) * (model.pricing.prompt / 1000)
-    const completionCost = (completionTokens / 1000) * (model.pricing.completion / 1000)
+  /**
+   * Calculates the estimated cost of an LLM interaction based on token usage and model pricing.
+   */
+  const calculateCost = (model: LLMModel, promptTokens: number, completionTokens: number = 0): number => {
+    const promptCost = (promptTokens / 1000) * model.pricing.prompt
+    const completionCost = (completionTokens / 1000) * model.pricing.completion
     return promptCost + completionCost
   }
 
-  // Count tokens (rough estimate)
-  const estimateTokens = (text: string) => {
+  /**
+   * Estimates the number of tokens in a given text.
+   */
+  const estimateTokens = (text: string): number => {
     return Math.ceil(text.length / 4) // Rough estimate: 1 token ≈ 4 characters
   }
 
-  // Send chat message
+  /**
+   * Sends a chat message to the specified LLM model and returns the completion.
+   */
   const sendMessage = async (
-    messages: Array<{ role: string; content: string }>,
-    modelId: string,
-    options: {
-      temperature?: number
-      maxTokens?: number
-      stream?: boolean
-    } = {}
-  ) => {
+      messages: ChatCompletionMessageParam[],
+      modelId: string,
+      options: {
+        temperature?: number
+        maxTokens?: number
+        stream?: boolean
+      } = {}
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion | AsyncIterable<ChatCompletionChunk>> => {
     const {
       temperature = 0.7,
       maxTokens = 4000,
@@ -123,29 +150,31 @@ export const useLLM = () => {
     try {
       const completion = await openai.chat.completions.create({
         model: modelId,
-        messages: messages as any,
+        messages: messages,
         temperature,
         max_tokens: maxTokens,
         stream
       })
 
       return completion
-    } catch (error) {
+    } catch (error: any) {
       console.error('LLM API Error:', error)
       throw new Error(`Failed to get response from ${modelId}: ${error.message}`)
     }
   }
 
-  // Generate image
+  /**
+   * Generates an image using the specified image generation model.
+   */
   const generateImage = async (
-    prompt: string,
-    modelId: string = 'openai/dall-e-3',
-    options: {
-      size?: string
-      quality?: string
-      style?: string
-    } = {}
-  ) => {
+      prompt: string,
+      modelId: string = 'openai/dall-e-3',
+      options: {
+        size?: ImageGenerateParams['size']
+        quality?: ImageGenerateParams['quality']
+        style?: ImageGenerateParams['style']
+      } = {}
+  ): Promise<Images.Image | undefined> => {
     const {
       size = '1024x1024',
       quality = 'standard',
@@ -156,25 +185,30 @@ export const useLLM = () => {
       const response = await openai.images.generate({
         model: modelId,
         prompt,
-        size: size as any,
-        quality: quality as any,
-        style: style as any,
+        size: size,
+        quality: quality,
+        style: style,
         n: 1
       })
 
-      return response.data[0]
-    } catch (error) {
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return undefined;
+    } catch (error: any) {
       console.error('Image Generation Error:', error)
       throw new Error(`Failed to generate image: ${error.message}`)
     }
   }
 
-  // Analyze image with vision model
+  /**
+   * Analyzes an image using a vision-capable LLM model.
+   */
   const analyzeImage = async (
-    imageUrl: string,
-    prompt: string = "What do you see in this image?",
-    modelId: string = 'openai/gpt-4o'
-  ) => {
+      imageUrl: string,
+      prompt: string = "What do you see in this image?",
+      modelId: string = 'openai/gpt-4o'
+  ): Promise<string | null | undefined> => {
     try {
       const completion = await openai.chat.completions.create({
         model: modelId,
@@ -190,15 +224,17 @@ export const useLLM = () => {
         max_tokens: 1000
       })
 
-      return completion.choices[0].message.content
-    } catch (error) {
+      return completion.choices[0]?.message?.content
+    } catch (error: any) {
       console.error('Image Analysis Error:', error)
       throw new Error(`Failed to analyze image: ${error.message}`)
     }
   }
 
-  // Stream response handler
-  const handleStreamResponse = async function* (stream: any) {
+  /**
+   * Handles streaming responses from the LLM, yielding chunks of content.
+   */
+  const handleStreamResponse = async function* (stream: AsyncIterable<ChatCompletionChunk>): AsyncGenerator<StreamChunk> {
     try {
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta
@@ -208,17 +244,18 @@ export const useLLM = () => {
             finished: false
           }
         }
-        
-        if (chunk.choices[0]?.finish_reason) {
+
+        const finishReason = chunk.choices[0]?.finish_reason
+        if (finishReason) {
           yield {
             content: '',
             finished: true,
-            finishReason: chunk.choices[0].finish_reason,
+            finishReason: finishReason,
             usage: chunk.usage
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Stream error:', error)
       yield {
         content: '',
@@ -228,78 +265,87 @@ export const useLLM = () => {
     }
   }
 
-  // Get available models from OpenRouter API
-  const fetchAvailableModels = async () => {
+  /**
+   * Fetches the list of available models from the OpenRouter API.
+   */
+  const fetchAvailableModels = async (): Promise<any[]> => {
     try {
       const response = await fetch('https://openrouter.ai/api/v1/models', {
         headers: {
           'Authorization': `Bearer ${config.public.openrouterApiKey}`
         }
       })
-      
+
       if (!response.ok) {
-        throw new Error('Failed to fetch models')
+        throw new Error(`Failed to fetch models: ${response.statusText}`)
       }
-      
+
       const data = await response.json()
       return data.data
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch available models:', error)
       return []
     }
   }
 
-  // Prepare messages for API (handle attachments, etc.)
-  const prepareMessages = (messages: Message[]) => {
+  /**
+   * Prepares messages for the LLM API, handling attachments for vision models.
+   */
+  const prepareMessages = (messages: Message[]): ChatCompletionMessageParam[] => {
     return messages
-      .filter(m => m.role !== 'system' || m.content.trim()) // Remove empty system messages
-      .map(message => {
-        const baseMessage = {
-          role: message.role,
-          content: message.content
-        }
+        .filter(m => m.role !== 'system' || (m.content && m.content.trim()))
+        .map(message => {
+          const baseMessage: ChatCompletionMessageParam = {
+            role: message.role,
+            content: message.content ?? ''
+          }
 
-        // Handle attachments for vision models
-        if (message.attachments && message.attachments.length > 0) {
-          const imageAttachments = message.attachments.filter(att => att.type === 'image')
-          
-          if (imageAttachments.length > 0) {
-            return {
-              role: message.role,
-              content: [
-                { type: "text", text: message.content },
-                ...imageAttachments.map(img => ({
+          // Handle attachments for vision models
+          if (message.attachments && message.attachments.length > 0) {
+            const imageAttachments = message.attachments.filter(att => att.type === 'image')
+
+            if (imageAttachments.length > 0) {
+              const contentParts: ChatCompletionContentPart[] = [
+                { type: "text", text: message.content ?? '' }
+              ];
+
+              imageAttachments.forEach(img => {
+                contentParts.push({
                   type: "image_url",
                   image_url: { url: img.url }
-                }))
-              ]
+                });
+              });
+
+              return {
+                role: message.role,
+                content: contentParts
+              }
             }
           }
-        }
 
-        return baseMessage
-      })
+          return baseMessage
+        })
   }
 
   return {
     // Models and capabilities
     models,
     getModelsByCapability,
-    
+
     // Cost calculation
     calculateCost,
     estimateTokens,
-    
+
     // Core functionality
     sendMessage,
     generateImage,
     analyzeImage,
     handleStreamResponse,
     prepareMessages,
-    
+
     // API management
     fetchAvailableModels,
-    
+
     // Direct OpenAI client access for advanced usage
     openai
   }

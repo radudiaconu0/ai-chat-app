@@ -87,7 +87,7 @@
                 variant="outline"
                 color="gray"
                 size="sm"
-                @click="createChatWithModel('anthropic/claude-3.5-sonnet')"
+                @click="createChatWithModel('anthropic/claude-3.7-sonnet')"
                 class="text-left"
             >
               <div>
@@ -213,7 +213,7 @@ const formatDate = (date) => {
 
 // Actions
 const createNewChat = async () => {
-  await createChatWithModel('anthropic/claude-3.5-sonnet')
+  await createChatWithModel('anthropic/claude-3.7-sonnet')
 }
 
 const createChatWithModel = async (modelId) => {

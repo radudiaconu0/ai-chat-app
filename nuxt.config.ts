@@ -8,7 +8,7 @@ export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/fonts', '@nuxt/icon', '@nuxt/scripts', '@nuxt/ui', '@nuxt/test-utils', '@nuxt/image', '@nuxtjs/supabase', '@nuxtjs/tailwindcss', '@vueuse/nuxt'],
   runtimeConfig: {
     public: {
-      openAiKey: process.env.OPENAI_API_KEY || ''
+      openrouterApiKey: process.env.NUXT_PUBLIC_OPENROUTER_API_KEY
     }
   },
   supabase: {
