@@ -124,8 +124,7 @@ export const useCrossTabSync = () => {
         messages.value = await db.messages
             .where('chatId')
             .equals(chatId)
-            .orderBy('createdAt')
-            .toArray()
+            .sortBy('createdAt')
     }
 
     const loadChats = async (userId: number) => {

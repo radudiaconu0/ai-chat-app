@@ -178,7 +178,8 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+
 // Import Zod for schema validation
 import { z } from 'zod'
 
@@ -199,17 +200,18 @@ useHead({
 const supabase = useSupabaseClient()
 // Access the currently logged-in Supabase user. This is reactive.
 const user = useSupabaseUser()
+console.log(user)
 
 // --- Authentication Redirection ---
 // Watches the `user` object for changes. If a user becomes logged in,
 // it redirects them to the '/chat' page.
 // `immediate: true` ensures the check runs immediately on component mount,
 // preventing unnecessary rendering of the login page if already authenticated.
-watch(user, (newUser) => {
-  if (newUser) {
-    navigateTo('/chat')
-  }
-}, { immediate: true })
+// watch(user, (newUser) => {
+//   if (newUser) {
+//     navigateTo('/chat')
+//   }
+// }, { immediate: false }) // Change this to false
 
 // --- Form State and Validation Schema ---
 // Defines the validation schema for the email input using Zod.

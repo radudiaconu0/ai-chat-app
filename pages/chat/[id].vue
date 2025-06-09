@@ -38,7 +38,7 @@
           <div
               v-for="chat in chats"
               :key="chat.id"
-              @click="selectChat(chat.id!)"
+              @click="selectChat(chat.id)"
               class="group relative p-3 rounded-lg cursor-pointer transition-colors"
               :class="{
               'bg-primary-600 text-white': chat.id === currentChatId,
@@ -55,7 +55,7 @@
                 </div>
               </div>
 
-              <UDropdown
+              <UDropdownMenu
                   v-if="chat.id === currentChatId"
                   :items="chatMenuItems"
                   @click.stop
@@ -68,7 +68,7 @@
                     icon="i-heroicons-ellipsis-vertical"
                     class="opacity-0 group-hover:opacity-100"
                 />
-              </UDropdown>
+              </UDropdownMenu>
             </div>
           </div>
 
@@ -206,7 +206,7 @@
 
                   <div
                       v-else
-                      class="flex items-center p-2 bg-gray-600 rounded-lg"
+                      class="flex items-center p-2 rounded-lg"
                   >
                     <UIcon name="i-heroicons-document" class="w-4 h-4 mr-2" />
                     <span class="text-xs truncate">{{ attachment.filename }}</span>
@@ -262,11 +262,12 @@
                 />
 
                 <UButton
-                    variant="ghost"
-                    color="gray"
-                    size="xs"
-                    icon="i-heroicons-hand-thumb-up"
-                    @click="reactToMessage(message.id!, '👍')"
+                  v-if="message.id"
+                  variant="ghost"
+                  color="gray"
+                  size="xs"
+                  icon="i-heroicons-hand-thumb-up"
+                  @click="reactToMessage(message.id, '👍')"
                 />
               </div>
             </div>
@@ -306,13 +307,12 @@
               <div
                   v-for="(attachment, index) in attachments"
                   :key="index"
-                  class="relative inline-flex items-center bg-gray-600 rounded-lg p-2"
+                  class="relative inline-flex items-center rounded-lg p-2"
               >
                 <UIcon name="i-heroicons-document" class="w-4 h-4 mr-2" />
                 <span class="text-xs">{{ attachment.name }}</span>
                 <UButton
                     variant="ghost"
-                    color="gray"
                     size="xs"
                     icon="i-heroicons-x-mark"
                     @click="removeAttachment(index)"
@@ -354,7 +354,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 // Meta
 useHead({
   title: 'Chat - AI Chat'
@@ -394,9 +394,9 @@ const demoUser = import.meta.client ? JSON.parse(localStorage.getItem('demoUser'
 const currentUser = user.value || demoUser
 
 // Redirect if not authenticated
-if (!currentUser) {
-  navigateTo('/login')
-}
+// if (!currentUser) {
+//   navigateTo('/login')
+// }
 
 // Model options for select
 const modelOptions = computed(() =>
@@ -464,7 +464,7 @@ onMounted(async () => {
     const { getUserBySupabaseId, createUser } = useDatabase()
 
     let localUser
-    if (currentUser.isDemo) {
+    if (currentUser?.isDemo) {
       localUser = { id: 1 } // Demo user ID
     } else {
       localUser = await getUserBySupabaseId(currentUser.id)
@@ -507,7 +507,7 @@ const formatMessage = (content) => {
   return content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code class="bg-gray-600 px-1 rounded">$1</code>')
+      .replace(/`(.*?)`/g, '<code class="px-1 rounded">$1</code>')
       .replace(/\n/g, '<br>')
 }
 
@@ -519,7 +519,7 @@ const scrollToBottom = () => {
 
 // Chat actions
 const createNewChat = async () => {
-  if (!currentUser) return
+  // if (!currentUser) return
 
   try {
     isCreatingChat.value = true
@@ -527,7 +527,7 @@ const createNewChat = async () => {
     const { getUserBySupabaseId } = useDatabase()
     let localUser
 
-    if (currentUser.isDemo) {
+    if (currentUser?.isDemo) {
       localUser = { id: 1 }
     } else {
       localUser = await getUserBySupabaseId(currentUser.id)
@@ -789,7 +789,7 @@ watch(messages, () => {
   }
 }
 
-.prose code {
+/* .prose code {
   @apply bg-gray-600 px-1 rounded text-sm;
-}
+} */
 </style>

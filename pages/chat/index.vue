@@ -11,14 +11,14 @@
             <span class="font-semibold text-white">AI Chat</span>
           </div>
 
-          <UDropdown :items="userMenuItems" :popper="{ placement: 'bottom-start' }">
+          <UDropdownMenu :items="userMenuItems" :popper="{ placement: 'bottom-start' }">
             <UAvatar
                 :src="currentUser?.avatar"
                 :alt="currentUser?.name || currentUser?.email"
                 size="sm"
                 class="cursor-pointer"
             />
-          </UDropdown>
+          </UDropdownMenu>
         </div>
 
         <UButton
@@ -38,7 +38,7 @@
           <div
               v-for="chat in chats"
               :key="chat.id"
-              @click="selectChat(chat.id!)"
+              @click="selectChat(chat.id)"
               class="group relative p-3 rounded-lg cursor-pointer transition-colors text-gray-300 hover:bg-gray-700"
           >
             <div class="flex items-center justify-between">
@@ -164,7 +164,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 // Meta
 useHead({
   title: 'Chat - AI Chat'
@@ -178,11 +178,6 @@ const { chats, loadChats, createChatWithSync } = useCrossTabSync()
 const user = useSupabaseUser()
 const demoUser = process.client ? JSON.parse(localStorage.getItem('demoUser') || 'null') : null
 const currentUser = user.value || demoUser
-
-// Redirect if not authenticated
-if (!currentUser) {
-  navigateTo('/login')
-}
 
 // State
 const isCreatingChat = ref(false)
@@ -227,21 +222,37 @@ const createChatWithModel = async (modelId) => {
   try {
     isCreatingChat.value = true
 
-    const { getUserBySupabaseId } = useDatabase()
     let localUser
 
     if (currentUser.isDemo) {
+      // For demo users, just use a hardcoded ID
       localUser = { id: 1 }
     } else {
+      // For real users, try to get from database
+      const { getUserBySupabaseId, createUser } = useDatabase()
       localUser = await getUserBySupabaseId(currentUser.id)
+      
+      // If user doesn't exist in local DB, create them
+      if (!localUser) {
+        console.log('Creating new local user for:', currentUser.email)
+        const userId = await createUser(currentUser.id, currentUser.email, currentUser.name || currentUser.email)
+        localUser = { id: userId }
+      }
     }
 
-    if (localUser) {
+    console.log('Local user:', localUser) // Debug log
+
+    if (localUser && localUser.id) {
       const chatId = await createChatWithSync(localUser.id, modelId)
       navigateTo(`/chat/${chatId}`)
+    } else {
+      console.error('Failed to get or create local user')
+      throw new Error('Failed to get or create local user')
     }
   } catch (error) {
     console.error('Error creating chat:', error)
+    // Show user-friendly error
+    alert('Failed to create chat. Please try again.')
   } finally {
     isCreatingChat.value = false
   }
@@ -267,7 +278,7 @@ onMounted(async () => {
     const { getUserBySupabaseId, createUser } = useDatabase()
 
     let localUser
-    if (currentUser.isDemo) {
+    if (currentUser?.isDemo) {
       localUser = { id: 1 }
     } else {
       localUser = await getUserBySupabaseId(currentUser.id)

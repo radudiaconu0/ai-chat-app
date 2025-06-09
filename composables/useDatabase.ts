@@ -63,6 +63,12 @@ export interface Branch {
     createdAt: Date
 }
 
+export interface ChatStats {
+    totalChats: number
+    totalMessages: number
+    totalTokens: number
+}
+
 class ChatDatabase extends Dexie {
     users!: Table<User>
     chats!: Table<Chat>
@@ -82,16 +88,16 @@ class ChatDatabase extends Dexie {
         })
 
         // Add hooks for automatic timestamps
-        this.chats.hook('creating', function (primKey, obj, trans) {
+        this.chats.hook('creating', function (primKey: any, obj: Chat, trans: any) {
             obj.createdAt = new Date()
             obj.updatedAt = new Date()
         })
 
-        this.chats.hook('updating', function (modifications, primKey, obj, trans) {
+        this.chats.hook('updating', function (modifications: Partial<Chat>, primKey: any, obj: Chat, trans: any) {
             modifications.updatedAt = new Date()
         })
 
-        this.messages.hook('creating', function (primKey, obj, trans) {
+        this.messages.hook('creating', function (primKey: any, obj: Message, trans: any) {
             obj.createdAt = new Date()
             obj.synced = false
         })
@@ -131,17 +137,16 @@ export const useDatabase = () => {
     }
 
     const deleteChat = async (chatId: number): Promise<void> => {
-        await db.transaction('rw', db.chats, db.messages, db.attachments, () => {
-            db.chats.delete(chatId)
-            db.messages.where('chatId').equals(chatId).delete()
-            db.attachments.where('messageId').anyOf(
-                db.messages.where('chatId').equals(chatId).primaryKeys()
-            ).delete()
+        await db.transaction('rw', db.chats, db.messages, db.attachments, async () => {
+            const messageIds = await db.messages.where('chatId').equals(chatId).primaryKeys() as number[];
+            await db.attachments.where('messageId').anyOf(messageIds).delete();
+            await db.messages.where('chatId').equals(chatId).delete()
+            await db.chats.delete(chatId)
         })
     }
 
     // Message operations
-    const addMessage = async (message: Omit<Message, 'id'>): Promise<number> => {
+    const addMessage = async (message: Omit<Message, 'id' | 'createdAt' | 'synced'>): Promise<number> => {
         return await db.messages.add({
             ...message,
             createdAt: new Date(),
@@ -158,10 +163,10 @@ export const useDatabase = () => {
             query = query.and(m => !m.branchId) // Main branch
         }
 
-        return await query.orderBy('createdAt').toArray()
+        return await query.sortBy('createdAt')
     }
 
-    const updateMessage = async (messageId: number, updates: Partial<Message>): Promise<void> => {
+    const updateMessage = async (messageId: number, updates: Partial<Omit<Message, 'id' | 'createdAt'>>): Promise<void> => {
         await db.messages.update(messageId, {
             ...updates,
             synced: false
@@ -212,7 +217,13 @@ export const useDatabase = () => {
     // Search operations
     const searchMessages = async (query: string, userId: number): Promise<Message[]> => {
         const userChats = await getUserChats(userId)
-        const chatIds = userChats.map(chat => chat.id!).filter(Boolean)
+        const chatIds = userChats
+            .map(chat => chat.id)
+            .filter((id): id is number => id !== undefined)
+
+        if (chatIds.length === 0) {
+            return [];
+        }
 
         return await db.messages
             .where('chatId')
@@ -225,19 +236,32 @@ export const useDatabase = () => {
     }
 
     // Statistics
-    const getChatStats = async (userId: number) => {
+    const getChatStats = async (userId: number): Promise<ChatStats> => {
         const chats = await getUserChats(userId)
+        const chatIds = chats
+            .map(c => c.id)
+            .filter((id): id is number => id !== undefined)
+
+        if (chatIds.length === 0) {
+            return {
+                totalChats: 0,
+                totalMessages: 0,
+                totalTokens: 0,
+            }
+        }
+        
         const totalMessages = await db.messages
             .where('chatId')
-            .anyOf(chats.map(c => c.id!).filter(Boolean))
+            .anyOf(chatIds)
             .count()
 
-        const totalTokens = await db.messages
+        const messages = await db.messages
             .where('chatId')
-            .anyOf(chats.map(c => c.id!).filter(Boolean))
+            .anyOf(chatIds)
             .and(m => m.tokens !== undefined)
             .toArray()
-            .then(messages => messages.reduce((sum, m) => sum + (m.tokens || 0), 0))
+        
+        const totalTokens = messages.reduce((sum, m) => sum + (m.tokens || 0), 0)
 
         return {
             totalChats: chats.length,

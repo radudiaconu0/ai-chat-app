@@ -15,10 +15,11 @@ export interface LLMModel {
 
 export const useLLM = () => {
   const config = useRuntimeConfig()
+  console.log(config.openAiKey)
   
   const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
-    apiKey: config.public.openrouterApiKey,
+    apiKey: config.public.openAiKey,
     defaultHeaders: {
       "HTTP-Referer": "http://localhost:3000",
       "X-Title": "AI Chat App",
